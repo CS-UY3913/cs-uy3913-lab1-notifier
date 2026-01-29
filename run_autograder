@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+
+# Gradescope autograder run script
+# Runs for each student submission
+
+set -e
+
+SUBMISSION_DIR="/autograder/submission"
+RESULTS_DIR="/autograder/results"
+WORK_DIR="/autograder/work"
+
+mkdir -p "$RESULTS_DIR"
+mkdir -p "$WORK_DIR"
+
+# Copy solution pom.xml and test files (students don't submit these)
+cp /autograder/source/pom.xml "$WORK_DIR/"
+mkdir -p "$WORK_DIR/src/test"
+cp -r /autograder/source/src/test/* "$WORK_DIR/src/test/"
+
+# Copy student's source files
+if [ -d "$SUBMISSION_DIR/src/main" ]; then
+    cp -r "$SUBMISSION_DIR/src/main" "$WORK_DIR/src/"
+elif [ -d "$SUBMISSION_DIR/notifier" ]; then
+    mkdir -p "$WORK_DIR/src/main/java"
+    cp -r "$SUBMISSION_DIR/notifier" "$WORK_DIR/src/main/java/"
+elif ls "$SUBMISSION_DIR"/*.java 1>/dev/null 2>&1; then
+    mkdir -p "$WORK_DIR/src/main/java/notifier"
+    cp "$SUBMISSION_DIR"/*.java "$WORK_DIR/src/main/java/notifier/"
+else
+    # Try to find java files recursively
+    mkdir -p "$WORK_DIR/src/main/java/notifier"
+    find "$SUBMISSION_DIR" -name "*.java" -exec cp {} "$WORK_DIR/src/main/java/notifier/" \;
+fi
+
+cd "$WORK_DIR"
+
+# Run Maven tests and capture output
+MVN_OUTPUT=$(mvn clean test 2>&1) || true
+
+# Parse test results and generate Gradescope JSON
+python3 << 'PYTHON_SCRIPT'
+import os
+import json
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+results = {"tests": [], "output": ""}
+total_score = 0
+max_total = 0
+
+# Find surefire reports
+report_dir = Path("/autograder/work/target/surefire-reports")
+
+if report_dir.exists():
+    for xml_file in report_dir.glob("TEST-*.xml"):
+        try:
+            tree = ET.parse(xml_file)
+            root = tree.getroot()
+
+            for testcase in root.findall(".//testcase"):
+                test_name = f"{testcase.get('classname')}.{testcase.get('name')}"
+                max_score = 10.0
+                max_total += max_score
+
+                failure = testcase.find("failure")
+                error = testcase.find("error")
+                skipped = testcase.find("skipped")
+
+                if failure is not None:
+                    results["tests"].append({
+                        "name": test_name,
+                        "score": 0,
+                        "max_score": max_score,
+                        "status": "failed",
+                        "output": failure.text or failure.get("message", "Test failed")
+                    })
+                elif error is not None:
+                    results["tests"].append({
+                        "name": test_name,
+                        "score": 0,
+                        "max_score": max_score,
+                        "status": "failed",
+                        "output": error.text or error.get("message", "Test error")
+                    })
+                elif skipped is not None:
+                    results["tests"].append({
+                        "name": test_name,
+                        "score": 0,
+                        "max_score": max_score,
+                        "status": "failed",
+                        "output": "Test skipped"
+                    })
+                else:
+                    total_score += max_score
+                    results["tests"].append({
+                        "name": test_name,
+                        "score": max_score,
+                        "max_score": max_score,
+                        "status": "passed",
+                        "output": "Test passed"
+                    })
+        except Exception as e:
+            pass
+
+if not results["tests"]:
+    # No test results - compilation likely failed
+    mvn_output_file = "/autograder/work/mvn_output.txt"
+    output_text = "Compilation or test execution failed. Check your code for errors."
+
+    if os.path.exists(mvn_output_file):
+        with open(mvn_output_file, "r") as f:
+            output_text = f.read()[-2000:]  # Last 2000 chars
+
+    results["tests"].append({
+        "name": "Compilation",
+        "score": 0,
+        "max_score": 30,
+        "status": "failed",
+        "output": output_text
+    })
+    results["score"] = 0
+else:
+    results["score"] = total_score
+
+# Write results
+with open("/autograder/results/results.json", "w") as f:
+    json.dump(results, f, indent=2)
+
+print(f"Score: {total_score}/{max_total}")
+PYTHON_SCRIPT
+
+# Save Maven output for debugging
+echo "$MVN_OUTPUT" > "$WORK_DIR/mvn_output.txt"
+
+echo "Autograder complete"

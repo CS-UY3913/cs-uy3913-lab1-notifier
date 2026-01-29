@@ -74,6 +74,32 @@ src/
     └── NotificationServiceTest.java
 ```
 
+## Submission Instructions (Gradescope)
+
+### What to Submit
+
+Submit a **zip file** containing your `src/main/java/notifier/` folder with all your Java files.
+
+### How to Create Your Submission
+
+**Option 1: Zip the notifier folder**
+```bash
+cd src/main/java
+zip -r submission.zip notifier/
+```
+
+**Option 2: Zip individual files**
+```bash
+cd src/main/java/notifier
+zip submission.zip *.java
+```
+
+### Before Submitting
+
+- [ ] `mvn clean test` passes locally
+- [ ] All 8 Java files are included
+- [ ] All files have `package notifier;` at the top
+
 ## Deliverables
 
 - All classes implemented and compiling
