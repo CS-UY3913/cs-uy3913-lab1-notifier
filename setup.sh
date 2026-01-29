@@ -1,15 +1,25 @@
 #!/usr/bin/env bash
+# Gradescope Autograder Setup Script
+# Base image: Ubuntu 22.04
+# Runs ONCE when Docker image is built
 
-# Gradescope autograder setup script
-# Runs once when the autograder Docker image is built
+set -euo pipefail
 
-set -e
+echo "=== Setting up Java 17 + Maven ==="
 
-apt-get update
+# Update package list
+apt-get update -y
+
+# Install Java 17 and Maven
 apt-get install -y openjdk-17-jdk maven
 
+# Set JAVA_HOME
+echo "export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> /etc/environment
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+
 # Verify installations
+echo "=== Verifying installations ==="
 java -version
 mvn -version
 
-echo "Setup complete: Java 17 and Maven installed"
+echo "=== Setup complete ==="

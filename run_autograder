@@ -1,135 +1,232 @@
 #!/usr/bin/env bash
+# Gradescope Autograder Run Script
+# Runs for EACH student submission
 
-# Gradescope autograder run script
-# Runs for each student submission
+set -uo pipefail
 
-set -e
-
+# Directories
+SOURCE_DIR="/autograder/source"
 SUBMISSION_DIR="/autograder/submission"
 RESULTS_DIR="/autograder/results"
 WORK_DIR="/autograder/work"
 
+# Create directories
 mkdir -p "$RESULTS_DIR"
+rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
 
-# Copy solution pom.xml and test files (students don't submit these)
-cp /autograder/source/pom.xml "$WORK_DIR/"
-mkdir -p "$WORK_DIR/src/test"
-cp -r /autograder/source/src/test/* "$WORK_DIR/src/test/"
+# Set Java environment
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+export PATH="$JAVA_HOME/bin:$PATH"
 
-# Copy student's source files
-if [ -d "$SUBMISSION_DIR/src/main" ]; then
-    cp -r "$SUBMISSION_DIR/src/main" "$WORK_DIR/src/"
+echo "=== Gradescope Autograder ==="
+echo "Java: $(java -version 2>&1 | head -1)"
+
+# -----------------------------
+# Step 1: Set up project structure
+# -----------------------------
+
+# Copy pom.xml and test files from autograder source
+cp "$SOURCE_DIR/pom.xml" "$WORK_DIR/"
+mkdir -p "$WORK_DIR/src/test/java/notifier"
+cp -r "$SOURCE_DIR/src/test/java/notifier/"* "$WORK_DIR/src/test/java/notifier/"
+
+# -----------------------------
+# Step 2: Copy student submission
+# -----------------------------
+
+mkdir -p "$WORK_DIR/src/main/java/notifier"
+
+# Handle different submission formats
+if [ -d "$SUBMISSION_DIR/src/main/java/notifier" ]; then
+    # Full Maven structure: src/main/java/notifier/
+    echo "Found: Maven structure (src/main/java/notifier/)"
+    cp -r "$SUBMISSION_DIR/src/main/java/notifier/"* "$WORK_DIR/src/main/java/notifier/"
+
 elif [ -d "$SUBMISSION_DIR/notifier" ]; then
-    mkdir -p "$WORK_DIR/src/main/java"
-    cp -r "$SUBMISSION_DIR/notifier" "$WORK_DIR/src/main/java/"
+    # Just notifier folder
+    echo "Found: notifier/ folder"
+    cp -r "$SUBMISSION_DIR/notifier/"* "$WORK_DIR/src/main/java/notifier/"
+
 elif ls "$SUBMISSION_DIR"/*.java 1>/dev/null 2>&1; then
-    mkdir -p "$WORK_DIR/src/main/java/notifier"
+    # Java files at root
+    echo "Found: Java files at root"
     cp "$SUBMISSION_DIR"/*.java "$WORK_DIR/src/main/java/notifier/"
+
 else
-    # Try to find java files recursively
-    mkdir -p "$WORK_DIR/src/main/java/notifier"
-    find "$SUBMISSION_DIR" -name "*.java" -exec cp {} "$WORK_DIR/src/main/java/notifier/" \;
+    # Search recursively for Java files
+    echo "Searching for Java files..."
+    find "$SUBMISSION_DIR" -name "*.java" -type f -exec cp {} "$WORK_DIR/src/main/java/notifier/" \;
 fi
+
+# Count submitted files
+FILE_COUNT=$(ls -1 "$WORK_DIR/src/main/java/notifier/"*.java 2>/dev/null | wc -l || echo "0")
+echo "Found $FILE_COUNT Java files"
+
+# -----------------------------
+# Step 3: Run Maven tests
+# -----------------------------
 
 cd "$WORK_DIR"
 
-# Run Maven tests and capture output
+echo "=== Running mvn clean test ==="
 MVN_OUTPUT=$(mvn clean test 2>&1) || true
+MVN_EXIT_CODE=$?
 
-# Parse test results and generate Gradescope JSON
+echo "$MVN_OUTPUT" > "$WORK_DIR/mvn_output.txt"
+
+# -----------------------------
+# Step 4: Generate Gradescope JSON
+# -----------------------------
+
 python3 << 'PYTHON_SCRIPT'
-import os
 import json
+import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-results = {"tests": [], "output": ""}
-total_score = 0
-max_total = 0
-
-# Find surefire reports
-report_dir = Path("/autograder/work/target/surefire-reports")
-
-if report_dir.exists():
-    for xml_file in report_dir.glob("TEST-*.xml"):
-        try:
-            tree = ET.parse(xml_file)
-            root = tree.getroot()
-
-            for testcase in root.findall(".//testcase"):
-                test_name = f"{testcase.get('classname')}.{testcase.get('name')}"
-                max_score = 10.0
-                max_total += max_score
-
-                failure = testcase.find("failure")
-                error = testcase.find("error")
-                skipped = testcase.find("skipped")
-
-                if failure is not None:
-                    results["tests"].append({
-                        "name": test_name,
-                        "score": 0,
-                        "max_score": max_score,
-                        "status": "failed",
-                        "output": failure.text or failure.get("message", "Test failed")
-                    })
-                elif error is not None:
-                    results["tests"].append({
-                        "name": test_name,
-                        "score": 0,
-                        "max_score": max_score,
-                        "status": "failed",
-                        "output": error.text or error.get("message", "Test error")
-                    })
-                elif skipped is not None:
-                    results["tests"].append({
-                        "name": test_name,
-                        "score": 0,
-                        "max_score": max_score,
-                        "status": "failed",
-                        "output": "Test skipped"
-                    })
-                else:
-                    total_score += max_score
-                    results["tests"].append({
-                        "name": test_name,
-                        "score": max_score,
-                        "max_score": max_score,
-                        "status": "passed",
-                        "output": "Test passed"
-                    })
-        except Exception as e:
-            pass
-
-if not results["tests"]:
-    # No test results - compilation likely failed
-    mvn_output_file = "/autograder/work/mvn_output.txt"
-    output_text = "Compilation or test execution failed. Check your code for errors."
-
-    if os.path.exists(mvn_output_file):
-        with open(mvn_output_file, "r") as f:
-            output_text = f.read()[-2000:]  # Last 2000 chars
-
-    results["tests"].append({
-        "name": "Compilation",
+def generate_results():
+    results = {
+        "output": "",
+        "output_format": "text",
+        "tests": [],
         "score": 0,
-        "max_score": 30,
-        "status": "failed",
-        "output": output_text
-    })
-    results["score"] = 0
-else:
-    results["score"] = total_score
+        "max_score": 0
+    }
 
-# Write results
+    work_dir = Path("/autograder/work")
+    report_dir = work_dir / "target" / "surefire-reports"
+    mvn_output_file = work_dir / "mvn_output.txt"
+
+    # Read Maven output
+    mvn_output = ""
+    if mvn_output_file.exists():
+        mvn_output = mvn_output_file.read_text()
+
+    # Check for compilation errors
+    if "COMPILATION ERROR" in mvn_output or "BUILD FAILURE" in mvn_output:
+        # Extract error message
+        error_lines = []
+        capture = False
+        for line in mvn_output.split('\n'):
+            if '[ERROR]' in line:
+                capture = True
+            if capture:
+                error_lines.append(line)
+            if len(error_lines) > 20:
+                break
+
+        error_msg = '\n'.join(error_lines) if error_lines else "Compilation failed. Check your code for syntax errors."
+
+        results["output"] = "❌ Compilation Failed\n\n" + error_msg
+        results["tests"].append({
+            "name": "Compilation",
+            "score": 0,
+            "max_score": 30,
+            "status": "failed",
+            "output": error_msg[:1000]
+        })
+        results["max_score"] = 30
+        return results
+
+    # Parse JUnit XML results
+    tests_found = False
+    total_score = 0
+    max_score = 0
+    passed_count = 0
+    failed_count = 0
+
+    if report_dir.exists():
+        for xml_file in report_dir.glob("TEST-*.xml"):
+            try:
+                tree = ET.parse(xml_file)
+                root = tree.getroot()
+
+                for testcase in root.findall(".//testcase"):
+                    tests_found = True
+                    classname = testcase.get("classname", "")
+                    name = testcase.get("name", "")
+                    test_name = f"{classname.split('.')[-1]}.{name}"
+
+                    test_max_score = 10.0
+                    max_score += test_max_score
+
+                    failure = testcase.find("failure")
+                    error = testcase.find("error")
+                    skipped = testcase.find("skipped")
+
+                    if failure is not None:
+                        failed_count += 1
+                        msg = failure.get("message", "") or failure.text or "Test failed"
+                        results["tests"].append({
+                            "name": test_name,
+                            "score": 0,
+                            "max_score": test_max_score,
+                            "status": "failed",
+                            "output": f"❌ {msg[:500]}"
+                        })
+                    elif error is not None:
+                        failed_count += 1
+                        msg = error.get("message", "") or error.text or "Test error"
+                        results["tests"].append({
+                            "name": test_name,
+                            "score": 0,
+                            "max_score": test_max_score,
+                            "status": "failed",
+                            "output": f"❌ {msg[:500]}"
+                        })
+                    elif skipped is not None:
+                        failed_count += 1
+                        results["tests"].append({
+                            "name": test_name,
+                            "score": 0,
+                            "max_score": test_max_score,
+                            "status": "failed",
+                            "output": "⚠️ Test was skipped"
+                        })
+                    else:
+                        passed_count += 1
+                        total_score += test_max_score
+                        results["tests"].append({
+                            "name": test_name,
+                            "score": test_max_score,
+                            "max_score": test_max_score,
+                            "status": "passed",
+                            "output": "✅ Test passed"
+                        })
+            except Exception as e:
+                pass
+
+    if not tests_found:
+        results["output"] = "❌ No test results found. Make sure your code compiles and all required classes exist."
+        results["tests"].append({
+            "name": "Test Execution",
+            "score": 0,
+            "max_score": 30,
+            "status": "failed",
+            "output": "No tests were executed. Check that your submission includes all required files."
+        })
+        results["max_score"] = 30
+        return results
+
+    # Generate summary
+    total_tests = passed_count + failed_count
+    if failed_count == 0:
+        results["output"] = f"✅ All {total_tests} tests passed! Great job!"
+    else:
+        results["output"] = f"Your code compiled successfully.\n\n✅ {passed_count}/{total_tests} tests passed\n❌ {failed_count}/{total_tests} tests failed"
+
+    results["score"] = total_score
+    results["max_score"] = max_score
+
+    return results
+
+# Generate and write results
+results = generate_results()
 with open("/autograder/results/results.json", "w") as f:
     json.dump(results, f, indent=2)
 
-print(f"Score: {total_score}/{max_total}")
+print(f"Results: {results['score']}/{results.get('max_score', 'N/A')} points")
 PYTHON_SCRIPT
 
-# Save Maven output for debugging
-echo "$MVN_OUTPUT" > "$WORK_DIR/mvn_output.txt"
-
-echo "Autograder complete"
+echo "=== Autograder complete ==="

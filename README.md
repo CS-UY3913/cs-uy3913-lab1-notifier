@@ -74,31 +74,82 @@ src/
     └── NotificationServiceTest.java
 ```
 
+---
+
 ## Submission Instructions (Gradescope)
+
+### Before You Submit
+
+**Your code MUST pass `mvn clean test` locally before submitting.**
+
+```bash
+mvn clean test
+```
+
+If this fails on your machine, it will fail on Gradescope.
 
 ### What to Submit
 
-Submit a **zip file** containing your `src/main/java/notifier/` folder with all your Java files.
+Submit a **zip file** containing your Java source files from `src/main/java/notifier/`.
 
-### How to Create Your Submission
+### Required Files
+
+Your submission must include these 8 files:
+
+| File | Description |
+|------|-------------|
+| `Notifier.java` | Interface |
+| `EmailNotifier.java` | Part 1 |
+| `SmsNotifier.java` | Part 1 |
+| `SlackNotifier.java` | Part 1 |
+| `LoggingNotifier.java` | Part 2 |
+| `RetryingNotifier.java` | Part 2 |
+| `CompositeNotifier.java` | Part 2 |
+| `NotificationService.java` | Part 3 |
+
+### How to Create Your Submission Zip
 
 **Option 1: Zip the notifier folder**
 ```bash
-cd src/main/java
+cd your-project/src/main/java
 zip -r submission.zip notifier/
 ```
 
-**Option 2: Zip individual files**
+**Option 2: Zip just the Java files**
 ```bash
-cd src/main/java/notifier
+cd your-project/src/main/java/notifier
 zip submission.zip *.java
 ```
 
-### Before Submitting
+**Option 3: From IntelliJ**
+1. Right-click the `notifier` folder in `src/main/java/`
+2. Select "Compress" or "Create Archive"
+3. Upload the resulting zip file
 
-- [ ] `mvn clean test` passes locally
-- [ ] All 8 Java files are included
-- [ ] All files have `package notifier;` at the top
+### Grading
+
+| Test | Points |
+|------|--------|
+| `sendWelcome_callsSend` | 10 |
+| `sendWelcome_includesUserName` | 10 |
+| `sendWelcome_includesWelcome` | 10 |
+| **Total** | **30** |
+
+### Common Errors
+
+| Error Message | Solution |
+|---------------|----------|
+| "Compilation Failed" | Check for syntax errors. Ensure all files have `package notifier;` at the top. |
+| "No test results found" | Make sure `NotificationService` has a `sendWelcome(String userName)` method. |
+| "0/30 points" | Your code compiles but tests are failing. Check your implementation logic. |
+
+### Tips
+
+- All classes must be in the `notifier` package (`package notifier;`)
+- `NotificationService` must have a constructor that accepts a `Notifier`
+- `sendWelcome(String userName)` must call `notifier.send()` with a message containing "Welcome" and the user's name
+
+---
 
 ## Deliverables
 
