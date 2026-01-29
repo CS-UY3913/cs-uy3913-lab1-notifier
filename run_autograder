@@ -148,7 +148,8 @@ def generate_results():
                     name = testcase.get("name", "")
                     test_name = f"{classname.split('.')[-1]}.{name}"
 
-                    test_max_score = 10.0
+                    # Distribute 100 points across tests
+                    test_max_score = 33.33
                     max_score += test_max_score
 
                     failure = testcase.find("failure")

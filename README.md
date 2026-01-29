@@ -130,10 +130,10 @@ zip submission.zip *.java
 
 | Test | Points |
 |------|--------|
-| `sendWelcome_callsSend` | 10 |
-| `sendWelcome_includesUserName` | 10 |
-| `sendWelcome_includesWelcome` | 10 |
-| **Total** | **30** |
+| `sendWelcome_callsSend` | 33 |
+| `sendWelcome_includesUserName` | 33 |
+| `sendWelcome_includesWelcome` | 34 |
+| **Total** | **100** |
 
 ### Common Errors
 
@@ -141,7 +141,7 @@ zip submission.zip *.java
 |---------------|----------|
 | "Compilation Failed" | Check for syntax errors. Ensure all files have `package notifier;` at the top. |
 | "No test results found" | Make sure `NotificationService` has a `sendWelcome(String userName)` method. |
-| "0/30 points" | Your code compiles but tests are failing. Check your implementation logic. |
+| "0/100 points" | Your code compiles but tests are failing. Check your implementation logic. |
 
 ### Tips
 
