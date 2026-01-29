@@ -410,4 +410,4 @@ cs-uy3913-lab1-notifier/
 
 ---
 
-Good luck! 🚀
+Good luck! 
