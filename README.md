@@ -350,7 +350,7 @@ This section helps you resolve common setup, build, and submission issues. If yo
 |----------------|---------|
 | Ed Discussion | Post your question under Lab 1 |
 | Email | msf9335@nyu.edu |
-| Office Hours | Mondays 12–3 PM (Room TBA) |
+| Office Hours | Mondays and Tuesdays 12–3 PM (Zoom) |
 
 ---
 
