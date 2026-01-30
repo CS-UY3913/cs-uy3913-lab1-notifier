@@ -33,7 +33,7 @@ Refer to the toolchain setup guides for installation instructions:
 ### Clone the Starter Code Repository
 
 ```bash
-git clone https://github.com/bblackheart013/cs-uy3913-lab1-notifier.git
+git clone https://github.com/CS-UY3913/cs-uy3913-lab1-notifier.git
 cd cs-uy3913-lab1-notifier
 ```
 
